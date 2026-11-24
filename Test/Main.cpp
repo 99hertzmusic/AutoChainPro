@@ -123,11 +123,11 @@ int main (int argc, char** argv)
         }
 
     // Editor snapshots. Each processor is fed 3 s of bass + kick sidechain first so the kick shows up.
-    auto snap = [&] (const char* name, int trig, int shape, bool feedKick, bool autoFit, int licKind = hz::LicenceInfo::pro, const char* panel = nullptr)
+    auto snap = [&] (const char* name, int trig, int shape, bool feedKick, bool autoFit, int licKind = hz::LicenceInfo::pro, const char* panel = nullptr, const char* msg = nullptr)
     {
         const double sr = 48000; const int bs = 256;
         AutoChainProAudioProcessor p;
-        { hz::LicenceInfo li; li.kind = (hz::LicenceInfo::Kind) licKind; li.email = "buyer@example.com";
+        { hz::LicenceInfo li; li.kind = (hz::LicenceInfo::Kind) licKind; li.email = "buyer@example.com"; li.order = 10423;
           li.expires = licKind == hz::LicenceInfo::trial ? juce::Time::currentTimeMillis() / 1000 + 5 * 86400 - 60 : 0; p.setLicenceInfo (li); }
         { auto L = p.getBusesLayout(); L.inputBuses.getReference (1) = juce::AudioChannelSet::stereo(); p.setBusesLayout (L); }
         p.setRateAndBufferSizeDetails (sr, bs);
@@ -165,7 +165,7 @@ int main (int argc, char** argv)
         if (auto* t = dynamic_cast<juce::Timer*> (ed.get())) t->timerCallback();
         if (panel != nullptr)
             for (auto* c : ed->getChildren())
-                if (auto* pp = dynamic_cast<ProPanel*> (c)) pp->show (panel);
+                if (auto* pp = dynamic_cast<ProPanel*> (c)) { pp->show (panel); if (msg != nullptr) pp->setMessage (msg, true); }
         auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, 2.0f);
         juce::FileOutputStream fo (outDir.getChildFile (name));
         fo.setPosition (0); fo.truncate();
@@ -200,6 +200,7 @@ int main (int argc, char** argv)
                      kinds[(int) info.kind], info.email.toRawUTF8(), info.daysLeft());
     }
     hztest::runLicenceTests<AutoChainProAudioProcessor> ("autochainpro", [] (AutoChainProAudioProcessor& p) { return p.proUnlocked.load(); });
+    hztest::renderLicenceStates<AutoChainProAudioProcessor> ("autochainpro", outDir);
     hztest::runSavedSettingsTests<AutoChainProAudioProcessor> ([] (AutoChainProAudioProcessor& p)
     {
         setParam (p, "trigger", (float) AutoChainProAudioProcessor::kick);

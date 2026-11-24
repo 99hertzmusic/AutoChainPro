@@ -47,7 +47,7 @@ target_compile_definitions(AutoChainPro PUBLIC
 target_compile_features(AutoChainPro PUBLIC cxx_std_17)
 
 target_link_libraries(AutoChainPro
-    PRIVATE AutoChainProData juce::juce_audio_utils juce::juce_dsp
+    PRIVATE AutoChainProData juce::juce_audio_utils juce::juce_dsp juce::juce_cryptography
     PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
 # Offline test: click measurement + UI snapshot (not shipped)
@@ -57,5 +57,5 @@ if(AUTOCHAINPRO_BUILD_TEST)
     target_sources(AutoChainProTest PRIVATE Test/Main.cpp Source/PluginProcessor.cpp Source/PluginEditor.cpp Source/Licence/Licence.cpp Source/Licence/tweetnacl.c)
     target_compile_definitions(AutoChainProTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1 JUCE_MODAL_LOOPS_PERMITTED=1)
     target_compile_features(AutoChainProTest PRIVATE cxx_std_17)
-    target_link_libraries(AutoChainProTest PRIVATE AutoChainProData juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)
+    target_link_libraries(AutoChainProTest PRIVATE AutoChainProData juce::juce_audio_utils juce::juce_dsp juce::juce_cryptography juce::juce_recommended_config_flags)
 endif()
