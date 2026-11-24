@@ -40,6 +40,13 @@ AutoChainProAudioProcessor::AutoChainProAudioProcessor()
 
     setDrawPoints (defaultDrawPoints());
     setLicenceInfo (licence.check());
+    licenceWatcher = std::make_unique<hz::LicenceWatcher> (licence, licenceInfo, [this] (const hz::LicenceInfo& i) { setLicenceInfo (i); });
+}
+
+bool AutoChainProAudioProcessor::usesUpgradeSettings() const
+{
+    return isProValue ("trigger", (int) pTrigger->load()) || isProValue ("shape", (int) pShape->load())
+        || isProValue ("target", (int) pTarget->load());
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout AutoChainProAudioProcessor::createParameterLayout()

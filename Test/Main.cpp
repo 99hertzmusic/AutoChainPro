@@ -3,6 +3,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "../Source/PluginProcessor.h"
 #include "../Source/PluginEditor.h"
+#include "LicenceTests.h"
 #include <cmath>
 
 struct FakePlayHead : juce::AudioPlayHead
@@ -178,6 +179,16 @@ int main (int argc, char** argv)
     snap ("ui-free-upgrade-panel.png", AutoChainProAudioProcessor::tempo, 0, true, false, hz::LicenceInfo::none, "SIDECHAIN FROM YOUR KICK IS A PRO FEATURE");
     snap ("ui-trial.png", AutoChainProAudioProcessor::kick, 0, true, false, hz::LicenceInfo::trial);
     snap ("ui-trial-ended-panel.png", AutoChainProAudioProcessor::kick, 0, true, false, hz::LicenceInfo::trialExpired, "");
+    // Licence states (Launch prep renders)
+    snap ("licence-1-free.png", AutoChainProAudioProcessor::tempo, 0, false, false, hz::LicenceInfo::none);
+    snap ("licence-2-free-panel.png", AutoChainProAudioProcessor::tempo, 0, false, false, hz::LicenceInfo::none, "");
+    snap ("licence-3-trial.png", AutoChainProAudioProcessor::kick, 0, true, false, hz::LicenceInfo::trial);
+    snap ("licence-4-trial-panel.png", AutoChainProAudioProcessor::kick, 0, true, false, hz::LicenceInfo::trial, "");
+    snap ("licence-5-trial-ended.png", AutoChainProAudioProcessor::tempo, 0, false, false, hz::LicenceInfo::trialExpired);
+    snap ("licence-6-trial-ended-panel.png", AutoChainProAudioProcessor::tempo, 0, false, false, hz::LicenceInfo::trialExpired, "");
+    snap ("licence-7-licensed.png", AutoChainProAudioProcessor::kick, 0, true, false, hz::LicenceInfo::pro);
+    snap ("licence-8-licensed-panel.png", AutoChainProAudioProcessor::kick, 0, true, false, hz::LicenceInfo::pro, "");
+    snap ("licence-9-saved-upgrade-settings.png", AutoChainProAudioProcessor::kick, AutoChainProAudioProcessor::draw, true, false, hz::LicenceInfo::trialExpired);
 
     // Licence keys passed on the command line: name=key
     for (int a = 2; a < argc; ++a)
@@ -188,5 +199,19 @@ int main (int argc, char** argv)
         std::printf ("key %-14s -> %-12s email=%s daysLeft=%d\n", arg.upToFirstOccurrenceOf ("=", false, false).toRawUTF8(),
                      kinds[(int) info.kind], info.email.toRawUTF8(), info.daysLeft());
     }
-    return 0;
+    hztest::runLicenceTests<AutoChainProAudioProcessor> ("autochainpro", [] (AutoChainProAudioProcessor& p) { return p.proUnlocked.load(); });
+    hztest::runSavedSettingsTests<AutoChainProAudioProcessor> ([] (AutoChainProAudioProcessor& p)
+    {
+        setParam (p, "trigger", (float) AutoChainProAudioProcessor::kick);
+        setParam (p, "shape", (float) AutoChainProAudioProcessor::draw);
+        setParam (p, "target", (float) AutoChainProAudioProcessor::filter);
+    });
+    {
+        // and the audio still falls back to free: no licence + saved SIDECHAIN = tempo ducking
+        AutoChainProAudioProcessor p;
+        p.setLicenceInfo ({});
+        setParam (p, "trigger", (float) AutoChainProAudioProcessor::kick);
+        hztest::expect (! p.proUnlocked.load() && p.usesUpgradeSettings(), "no licence + saved SIDECHAIN: flagged, plays as free");
+    }
+    return hztest::finish();
 }

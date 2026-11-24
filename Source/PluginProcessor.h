@@ -57,8 +57,12 @@ public:
     hz::Licence licence { "autochainpro" };
     hz::LicenceInfo licenceInfo;                 // message thread
     std::atomic<bool> proUnlocked { false };     // audio thread reads this
-    void setLicenceInfo (const hz::LicenceInfo& i) { licenceInfo = i; proUnlocked.store (i.unlocked()); }
+    std::atomic<int> licenceVersion { 0 };       // bumps on every change, so open editors can follow
+    void setLicenceInfo (const hz::LicenceInfo& i) { licenceInfo = i; proUnlocked.store (i.unlocked()); ++licenceVersion; }
+    std::unique_ptr<hz::LicenceWatcher> licenceWatcher;   // picks up keys saved by other instances / trial expiry
     static bool isProValue (const juce::String& paramId, int value);
+    // True if the current settings include upgrade-only values (kept in the session, played as free).
+    bool usesUpgradeSettings() const;
 
     // ── Shapes ──────────────────────────────────────────────────────────────
     // Attenuation 0 (no duck) .. 1 (full duck) over the release, x in [0,1].

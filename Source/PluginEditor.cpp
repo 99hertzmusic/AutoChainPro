@@ -1,4 +1,4 @@
-// AutoChain Pro – UI (99Hertz hardware look: brushed panel, knurled dials, lit keys, LED screens)
+// AutoChain (Pro build) – UI (99Hertz hardware look: brushed panel, knurled dials, lit keys, LED screens)
 #include "PluginEditor.h"
 #include "BinaryData.h"
 #include <cmath>
@@ -227,13 +227,14 @@ public:
         if (b.getProperties().contains ("pill"))
         {
             const bool warnCol = (bool) b.getProperties()["warn"];
-            g.setFont (Fonts::led (11.5f, 0.1f));
+            g.setFont (Fonts::led (11.0f, 0.06f));
             g.setColour (warnCol ? Pal::warn : Pal::accent);
             g.drawText (b.getButtonText(), b.getLocalBounds(), juce::Justification::centred);
             return;
         }
         const bool locked = (bool) b.getProperties().getWithDefault ("locked", false);
         const bool on  = b.getToggleState() && ! locked;
+        const bool savedLocked = b.getToggleState() && locked;   // an upgrade setting saved in the project: shown greyed
         const bool lit = on || ((bool) b.getProperties().getWithDefault ("lit", false) && ! locked);
         auto r = b.getLocalBounds().toFloat().reduced (1.0f).withTrimmedBottom (3.0f);
         if (on || down) r.translate (0.0f, 2.0f);
@@ -249,13 +250,13 @@ public:
             g.fillRoundedRectangle (lamp.expanded (3.0f, 2.5f), 3.0f);
             g.setColour (lampCol);
         }
-        else g.setColour (Pal::lampOff);
+        else g.setColour (savedLocked ? Pal::silkLo : Pal::lampOff);
         g.fillRoundedRectangle (lamp, lh / 2);
 
         if (locked)
             padlock (g, { r.getRight() - 17.0f, r.getY() + 6.0f, 9.0f, 11.0f }, Pal::silkLo);
         g.setFont (Fonts::silkSemi (small ? 12.0f : 13.5f, 0.14f));
-        g.setColour (on ? juce::Colour (0xfff2f2ef) : Pal::silkMid.withAlpha (b.isEnabled() ? 1.0f : 0.5f));
+        g.setColour (on ? juce::Colour (0xfff2f2ef) : savedLocked ? Pal::silk.withAlpha (0.55f) : Pal::silkMid.withAlpha (b.isEnabled() ? 1.0f : 0.5f));
         g.drawText (b.getButtonText(), r.withTrimmedTop (lamp.getBottom() - r.getY()), juce::Justification::centred);
     }
 
@@ -373,7 +374,7 @@ void CurveView::paint (juce::Graphics& g)
     g.setFont (Fonts::led (11.0f, 0.08f));
     g.setColour (Pal::accent.withAlpha (0.4f));
     g.drawText (isDraw() ? juce::String (juce::CharPointer_UTF8 ("CLICK ADD \xc2\xb7 DRAG \xc2\xb7 DOUBLE-CLICK REMOVE"))
-                         : juce::String (proc.proUnlocked.load() ? "CLICK TO DRAW YOUR OWN" : "DRAW YOUR OWN: PRO"),
+                         : juce::String (proc.proUnlocked.load() ? "CLICK TO DRAW YOUR OWN" : "DRAW YOUR OWN: UPGRADE"),
                 area.reduced (16.0f, 9.0f).withHeight (14.0f), juce::Justification::centredRight);
 
     const auto r = plot();
@@ -393,7 +394,7 @@ void CurveView::paint (juce::Graphics& g)
         g.setFont (Fonts::led (11.0f, 0.08f));
         g.setColour (Pal::kick.withAlpha (0.35f));
         auto box = r.withTrimmedLeft (r.getWidth() * 0.45f).withTrimmedTop (r.getHeight() - 44.0f).reduced (8.0f, 4.0f);
-        g.drawFittedText ("PRO: SEE YOUR KICK HERE AND\nDRAW THE CURVE AROUND IT", box.toNearestInt(), juce::Justification::bottomRight, 2);
+        g.drawFittedText ("UPGRADE: SEE YOUR KICK HERE AND\nDRAW THE CURVE AROUND IT", box.toNearestInt(), juce::Justification::bottomRight, 2);
     }
     else if (haveKick)
     {
@@ -636,18 +637,29 @@ ProPanel::ProPanel (AutoChainProAudioProcessor& p) : proc (p)
     };
     unlockButton.onClick = [this]
     {
+        const auto pasted = hz::Licence::verify (keyBox.getText(), proc.licence.product);
         const auto info = proc.licence.apply (keyBox.getText());
-        if (info.unlocked())
+        if (info.kind == hz::LicenceInfo::saveFailed)
+        {
+            message = "COULDN'T SAVE YOUR KEY. EMAIL INFO@99HERTZ.COM";
+            messageIsError = true;
+        }
+        else if (pasted.kind == hz::LicenceInfo::trialExpired)
+        {
+            message = "THAT TRIAL KEY HAS ENDED";
+            messageIsError = true;
+        }
+        else if (info.unlocked())
         {
             proc.setLicenceInfo (info);
-            message = info.kind == hz::LicenceInfo::pro ? "PRO UNLOCKED. THANK YOU!" : "PRO TRIAL UNLOCKED";
+            message = info.kind == hz::LicenceInfo::pro ? "UNLOCKED. THANK YOU!" : "TRIAL UNLOCKED";
             messageIsError = false;
             keyBox.clear();
             if (onLicenceChanged) onLicenceChanged();
         }
         else
         {
-            message = info.kind == hz::LicenceInfo::trialExpired ? "THAT TRIAL KEY HAS ENDED" : "THAT KEY ISN'T VALID FOR AUTOCHAIN PRO";
+            message = "THAT KEY ISN'T VALID FOR AUTOCHAIN";
             messageIsError = true;
         }
         refresh();
@@ -668,7 +680,7 @@ ProPanel::ProPanel (AutoChainProAudioProcessor& p) : proc (p)
             if (info.unlocked())
             {
                 safe->proc.setLicenceInfo (info);
-                safe->message = "PRO UNLOCKED FOR 7 DAYS. YOUR KEY IS ON ITS WAY BY EMAIL.";
+                safe->message = "UNLOCKED FOR 7 DAYS. YOUR KEY IS ON ITS WAY BY EMAIL.";
                 safe->messageIsError = false;
                 if (safe->onLicenceChanged) safe->onLicenceChanged();
             }
@@ -676,6 +688,11 @@ ProPanel::ProPanel (AutoChainProAudioProcessor& p) : proc (p)
             safe->refresh();
         });
     };
+}
+
+void ProPanel::licenceChanged()
+{
+    if (isVisible()) refresh();
 }
 
 void ProPanel::show (const juce::String& why)
@@ -740,15 +757,20 @@ void ProPanel::paint (juce::Graphics& g)
     g.setFont (Fonts::silkBold (28.0f, 0.06f));
     g.setColour (Pal::silk);
     g.drawText ("AUTOCHAIN", juce::Rectangle<float> (x, c.getY() + 38.0f, w, 34.0f), juce::Justification::centredLeft);
-    g.setColour (Pal::accent);
-    g.drawText ("PRO", juce::Rectangle<float> (x + 152.0f, c.getY() + 38.0f, 80.0f, 34.0f), juce::Justification::centredLeft);
+    if (proc.licenceInfo.kind != hz::LicenceInfo::pro)
+    {
+        juce::GlyphArrangement ga; ga.addLineOfText (Fonts::silkBold (28.0f, 0.06f), "AUTOCHAIN", 0, 0);
+        g.setColour (Pal::accent);
+        g.drawText ("UPGRADE", juce::Rectangle<float> (x + ga.getBoundingBox (0, -1, true).getWidth() + 10.0f, c.getY() + 38.0f, 200.0f, 34.0f),
+                    juce::Justification::centredLeft);
+    }
 
     const auto k = proc.licenceInfo.kind;
     juce::String sub = reason;
-    if (k == hz::LicenceInfo::trial)        sub = "PRO TRIAL: " + juce::String (proc.licenceInfo.daysLeft()) + (proc.licenceInfo.daysLeft() == 1 ? " DAY LEFT" : " DAYS LEFT");
+    if (k == hz::LicenceInfo::trial)        sub = "TRIAL: " + proc.licenceInfo.daysLeftText();
     else if (k == hz::LicenceInfo::trialExpired) sub = "YOUR FREE TRIAL HAS ENDED";
-    else if (k == hz::LicenceInfo::pro)     sub = "UNLOCKED FOR " + proc.licenceInfo.email.toUpperCase();
-    else if (sub.isEmpty())                 sub = "TRY EVERY PRO FEATURE FREE FOR 7 DAYS";
+    else if (k == hz::LicenceInfo::pro)     sub = "LICENSED TO " + proc.licenceInfo.email.toUpperCase();
+    else if (sub.isEmpty())                 sub = "TRY EVERY UPGRADE FEATURE FREE FOR 7 DAYS";
     g.setFont (Fonts::led (14.0f, 0.08f));
     glowText (g, sub, { x, c.getY() + 78.0f, w, 18.0f }, juce::Justification::centredLeft, k == hz::LicenceInfo::trialExpired ? Pal::warn : Pal::accent);
 
@@ -832,7 +854,7 @@ AutoChainProAudioProcessorEditor::AutoChainProAudioProcessorEditor (AutoChainPro
     autoButton.setTooltip ("Fit the curve to your kick");
     autoButton.onClick = [this]
     {
-        if (! proc.proUnlocked.load()) { openPro ("AUTO-FIT TO YOUR KICK IS A PRO FEATURE"); return; }
+        if (! proc.proUnlocked.load()) { openPro ("AUTO-FIT TO YOUR KICK IS AN UPGRADE FEATURE"); return; }
         if (proc.autoShapeFromKick()) flashText = "CURVE FITTED TO YOUR KICK";
         else                          flashText = "NO KICK YET: PRESS PLAY";
         flashTicks = 75;
@@ -848,10 +870,10 @@ AutoChainProAudioProcessorEditor::AutoChainProAudioProcessorEditor (AutoChainPro
             return false;
         };
     };
-    trigger.allowValue = gate ("trigger", "SIDECHAIN FROM YOUR KICK IS A PRO FEATURE");
-    shape.allowValue   = gate ("shape",   "DRAWING YOUR OWN CURVE IS A PRO FEATURE");
-    target.allowValue  = gate ("target",  "FILTER DUCKING IS A PRO FEATURE");
-    curve.onLockedClick = [this] { openPro ("DRAWING YOUR OWN CURVE IS A PRO FEATURE"); };
+    trigger.allowValue = gate ("trigger", "SIDECHAIN FROM YOUR KICK IS AN UPGRADE FEATURE");
+    shape.allowValue   = gate ("shape",   "DRAWING YOUR OWN CURVE IS AN UPGRADE FEATURE");
+    target.allowValue  = gate ("target",  "FILTER DUCKING IS AN UPGRADE FEATURE");
+    curve.onLockedClick = [this] { openPro ("DRAWING YOUR OWN CURVE IS AN UPGRADE FEATURE"); };
 
     licenceButton.getProperties().set ("pill", true);
     licenceButton.onClick = [this] { openPro ({}); };
@@ -984,8 +1006,7 @@ void AutoChainProAudioProcessorEditor::renderBackground()
     {
         juce::GlyphArrangement ga; ga.addLineOfText (Fonts::silkBold (31.0f, 0.06f), "AUTOCHAIN", 0, 0);
         const float w = ga.getBoundingBox (0, -1, true).getWidth();
-        g.setColour (Pal::accent);
-        g.drawText ("PRO", padX + (int) w + 10, 50, 80, 36, juce::Justification::centredLeft);
+        juce::ignoreUnused (w);
     }
 
     // DEPTH label (header right)
@@ -1016,19 +1037,13 @@ void AutoChainProAudioProcessorEditor::updateLocks()
     autoButton.getProperties().set ("locked", ! pro);
 
     const auto& li = proc.licenceInfo;
-    juce::String t; bool warnCol = false;
-    switch (li.kind)
-    {
-        case hz::LicenceInfo::trial:        t = "PRO TRIAL: " + juce::String (li.daysLeft()) + (li.daysLeft() == 1 ? " DAY LEFT" : " DAYS LEFT"); break;
-        case hz::LicenceInfo::trialExpired: t = "TRIAL ENDED: GET PRO"; warnCol = true; break;
-        case hz::LicenceInfo::pro:          t = "PRO"; break;
-        default:                            t = "FREE: TRY PRO 7 DAYS"; break;
-    }
+    const auto t = li.buttonText();
+    const bool warnCol = li.kind == hz::LicenceInfo::trialExpired;
     if (licenceButton.getButtonText() != t || (bool) licenceButton.getProperties()["warn"] != warnCol)
     {
         licenceButton.setButtonText (t);
         licenceButton.getProperties().set ("warn", warnCol);
-        juce::GlyphArrangement ga; ga.addLineOfText (Fonts::led (11.5f, 0.1f), t, 0, 0);
+        juce::GlyphArrangement ga; ga.addLineOfText (Fonts::led (11.0f, 0.06f), t, 0, 0);
         const int w = (int) std::ceil (ga.getBoundingBox (0, -1, true).getWidth()) + 24;
         licenceButton.setBounds (padX, 88, w, 20);
         licenceButton.repaint();
@@ -1037,6 +1052,12 @@ void AutoChainProAudioProcessorEditor::updateLocks()
 
 void AutoChainProAudioProcessorEditor::timerCallback()
 {
+    if (const int v = proc.licenceVersion.load(); v != seenLicenceVersion)
+    {
+        seenLicenceVersion = v;   // another instance unlocked, a trial ended, or the panel saved a key
+        proPanel.licenceChanged();
+        repaint();
+    }
     const bool pro = proc.proUnlocked.load();
     const int trig = pro ? (int) proc.apvts.getRawParameterValue ("trigger")->load() : (int) ACP::tempo;
     const int shpP = (int) proc.apvts.getRawParameterValue ("shape")->load();
@@ -1088,6 +1109,14 @@ void AutoChainProAudioProcessorEditor::timerCallback()
         ledLabel = "TEMPO";
         ledText  = "DUCKING EVERY " + rateName;
     }
+    // A project saved with upgrade settings, opened without a trial or key: say so (it plays as free).
+    upgradeNudge = ! pro && proc.usesUpgradeSettings();
+    if (upgradeNudge)
+    {
+        ledWarn  = true;
+        ledLabel = "THIS PROJECT USES UPGRADE SETTINGS";
+        ledText  = "UPGRADE TO USE THEM AGAIN";
+    }
     if (flashTicks > 0 && --flashTicks > 0) ledText = flashText;
 
     const float target = proc.currentAmount.load();
@@ -1112,10 +1141,10 @@ void AutoChainProAudioProcessorEditor::paint (juce::Graphics& g)
         drawScreen (g, r);
         const auto col = ledWarn ? Pal::warn : Pal::accent;
         auto in = r.reduced (20.0f, 11.0f);
-        auto left = in.removeFromLeft (232.0f);
+        auto left = in.removeFromLeft (upgradeNudge ? in.getWidth() - 80.0f : 232.0f);
         g.setFont (Fonts::led (12.0f, 0.14f));
         glowText (g, ledLabel, left.removeFromTop (16.0f), juce::Justification::centredLeft, col.withAlpha (0.75f));
-        g.setFont (Fonts::led (21.0f, 0.04f));
+        g.setFont (Fonts::led (upgradeNudge ? 18.0f : 21.0f, 0.04f));
         glowText (g, ledText, left, juce::Justification::centredLeft, col);
 
         auto right = in.removeFromRight (64.0f);
@@ -1126,19 +1155,32 @@ void AutoChainProAudioProcessorEditor::paint (juce::Graphics& g)
 
         // KICK IN meter: shows the sidechain is actually arriving
         auto mid = in.reduced (10.0f, 0.0f);
-        g.setFont (Fonts::led (12.0f, 0.14f));
-        glowText (g, "KICK IN", mid.removeFromTop (16.0f), juce::Justification::centredLeft, Pal::accent.withAlpha (0.75f));
-        const float lvlDb = juce::Decibels::gainToDecibels (scMeter, -60.0f);
-        const int lit = juce::jlimit (0, 8, (int) std::ceil ((lvlDb + 48.0f) / 6.0f));
-        auto seg = mid.withTrimmedTop (7.0f).withHeight (12.0f);
-        const float sw = (seg.getWidth() - 7 * 3.0f) / 8.0f;
-        for (int i = 0; i < 8; ++i)
+        if (! upgradeNudge)
         {
-            auto s = juce::Rectangle<float> (seg.getX() + i * (sw + 3.0f), seg.getY(), sw, seg.getHeight());
-            if (i < lit) { g.setColour (Pal::accent.withAlpha (0.25f)); g.fillRect (s.expanded (1.5f)); g.setColour (Pal::accent); }
-            else g.setColour (Pal::accent.withAlpha (0.08f));
-            g.fillRect (s);
+            g.setFont (Fonts::led (12.0f, 0.14f));
+            glowText (g, "KICK IN", mid.removeFromTop (16.0f), juce::Justification::centredLeft, Pal::accent.withAlpha (0.75f));
+            const float lvlDb = juce::Decibels::gainToDecibels (scMeter, -60.0f);
+            const int lit = juce::jlimit (0, 8, (int) std::ceil ((lvlDb + 48.0f) / 6.0f));
+            auto seg = mid.withTrimmedTop (7.0f).withHeight (12.0f);
+            const float sw = (seg.getWidth() - 7 * 3.0f) / 8.0f;
+            for (int i = 0; i < 8; ++i)
+            {
+                auto s = juce::Rectangle<float> (seg.getX() + i * (sw + 3.0f), seg.getY(), sw, seg.getHeight());
+                if (i < lit) { g.setColour (Pal::accent.withAlpha (0.25f)); g.fillRect (s.expanded (1.5f)); g.setColour (Pal::accent); }
+                else g.setColour (Pal::accent.withAlpha (0.08f));
+                g.fillRect (s);
+            }
         }
+    }
+
+    // Licensed: the licence email in small print beside the LICENSED pill.
+    if (proc.licenceInfo.kind == hz::LicenceInfo::pro && proc.licenceInfo.email.isNotEmpty())
+    {
+        const auto lb = licenceButton.getBounds();
+        g.setFont (Fonts::silkMed (12.0f, 0.04f));
+        g.setColour (Pal::silkMid);
+        g.drawFittedText (proc.licenceInfo.email, { lb.getRight() + 8, lb.getY(), ledArea.getX() - lb.getRight() - 16, lb.getHeight() },
+                          juce::Justification::centredLeft, 1, 0.8f);
     }
 
     // DEPTH value under its label

@@ -55,6 +55,7 @@ class ProPanel : public juce::Component
 public:
     explicit ProPanel (AutoChainProAudioProcessor& p);
     void show (const juce::String& reason);
+    void licenceChanged();   // the processor's licence changed (another instance, trial expiry): redraw if open
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent& e) override;   // click outside the card closes it
@@ -68,7 +69,7 @@ private:
     juce::TextEditor emailBox, keyBox;
     juce::ToggleButton subscribe { "Send me tips and offers" };
     juce::TextButton trialButton { "START 7-DAY FREE TRIAL" }, unlockButton { "UNLOCK" },
-                     buyButton { "BUY PRO" }, closeButton { "CLOSE" };
+                     buyButton { "UPGRADE" }, closeButton { "CLOSE" };
 };
 
 class ScopeView : public juce::Component
@@ -117,7 +118,8 @@ private:
     juce::Image background;
     juce::Rectangle<int> ledArea, meterArea, secTrigger, secShape, secEnv, secOutput, hintArea;
     juce::String ledLabel, ledText, flashText;
-    bool ledWarn = false;
+    bool ledWarn = false, upgradeNudge = false;
+    int seenLicenceVersion = -1;
     int flashTicks = 0;
     float meterValue = 0.0f, scMeter = 0.0f;
 
